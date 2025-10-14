@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import ReplayPlayer from './ReplayPlayer';
-import type { SessionRecording, SnapshotsResponse, RRWebEvent } from '@/types/posthog';
+import type { SessionRecording, RRWebEvent } from '@/types/posthog';
 
 interface ReplayFeedProps {
   credentials: {
@@ -107,7 +107,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   }, [currentIndex, recordings.length]);
 
   // Prefetch recordings from current index to current index + 4
-  const prefetchRecordings = (recordingsList: SessionRecording[], fromIndex: number) => {
+  const prefetchRecordings = useCallback((recordingsList: SessionRecording[], fromIndex: number) => {
     const endIndex = Math.min(fromIndex + 5, recordingsList.length);
     
     for (let i = fromIndex; i < endIndex; i++) {
@@ -115,7 +115,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       // Fetch in background without awaiting
       fetchSnapshotsForRecording(recording.id, i === fromIndex);
     }
-  };
+  }, [snapshots, fetchingIds]);
 
   // Fetch snapshots for a specific recording
   const fetchSnapshotsForRecording = async (recordingId: string, isPrimary: boolean = false) => {
@@ -192,22 +192,22 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   };
 
   // Navigate to next recording
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (currentIndex < recordings.length - 1) {
       setCurrentIndex(currentIndex + 1);
       setSnapshotError(null);
       // Prefetching happens automatically via useEffect
     }
-  };
+  }, [currentIndex, recordings.length]);
 
   // Navigate to previous recording
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
       setSnapshotError(null);
       // Prefetching happens automatically via useEffect
     }
-  };
+  }, [currentIndex]);
 
   // Format duration in seconds to mm:ss
   const formatDuration = (seconds: number) => {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pako from 'pako';
 
 // Helper to decompress if needed
-function maybeDecompress(data: any): any {
+function maybeDecompress(data: unknown): unknown {
   if (typeof data === 'string' && data.charCodeAt(0) === 0x1f && data.charCodeAt(1) === 0x8b) {
     try {
       // Convert string to Uint8Array
@@ -18,6 +18,12 @@ function maybeDecompress(data: any): any {
     }
   }
   return data;
+}
+
+// Add interface for blob source
+interface BlobSource {
+  source: string;
+  blob_key?: number;
 }
 
 export async function POST(
@@ -66,10 +72,10 @@ export async function POST(
     }
 
     // STEP 2: Extract blob keys and batch them
-    const blobKeys = sourcesData.sources
-      .filter((source: any) => source.source === 'blob_v2' && source.blob_key !== undefined)
-      .map((source: any) => source.blob_key)
-      .sort((a: number, b: number) => a - b); // Sort to ensure sequential batches
+    const blobKeys = (sourcesData.sources as BlobSource[])
+      .filter((source) => source.source === 'blob_v2' && source.blob_key !== undefined)
+      .map((source) => source.blob_key as number)
+      .sort((a: number, b: number) => a - b);
 
     console.log(`Found ${blobKeys.length} blobs to fetch`);
 
@@ -88,7 +94,7 @@ export async function POST(
     console.log(`Created ${batches.length} batches (max ${BATCH_SIZE} blobs each)`);
 
     // STEP 4: Fetch each batch
-    const allEvents: any[] = [];
+    const allEvents: unknown[] = [];
 
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
@@ -115,7 +121,7 @@ export async function POST(
             const parsed = JSON.parse(line);
             // Data comes as [windowId, event] pairs
             if (Array.isArray(parsed) && parsed.length === 2) {
-              const event = parsed[1];
+              const event = parsed[1] as Record<string, unknown>;
               // DECOMPRESS the data field if needed
               if (event.data) {
                 event.data = maybeDecompress(event.data);
@@ -132,7 +138,11 @@ export async function POST(
     }
 
     // Sort by timestamp for proper playback
-    allEvents.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    allEvents.sort((a, b) => {
+      const aEvent = a as { timestamp?: number };
+      const bEvent = b as { timestamp?: number };
+      return (aEvent.timestamp || 0) - (bEvent.timestamp || 0);
+    });
 
     console.log(`✅ Collected ${allEvents.length} events from ${batches.length} batch(es)`);
 

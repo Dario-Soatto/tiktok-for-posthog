@@ -13,7 +13,7 @@ export interface SessionRecording {
       id: number;
       name: string;
       distinct_ids: string;
-      properties: Record<string, any> | null;
+      properties: Record<string, unknown> | null;  // Changed from any
     } | null;
     ongoing: boolean;
   }
@@ -29,7 +29,7 @@ export interface SessionRecording {
   // rrweb event types
   export interface RRWebEvent {
     type: number;
-    data: any;
+    data: unknown;  // Changed from any
     timestamp: number;
     delay?: number;
   }

@@ -87,10 +87,7 @@ export default function ReplayPlayer({
 
         // Listen for finish event
         if (playerRef.current && onFinish) {
-          playerRef.current.addEventListener('finish', () => {
-            console.log('🎬 Recording finished, moving to next...');
-            onFinish();
-          });
+          playerRef.current.addEventListener('finish', onFinish);
         }
 
         console.log('✅ Player created successfully');
@@ -109,7 +106,7 @@ export default function ReplayPlayer({
         playerRef.current.pause();
       }
     };
-  }, [snapshots, autoPlay, recordingId, dimensions]);
+  }, [snapshots, autoPlay, recordingId, dimensions, onFinish]);  // Add onFinish to dependencies
 
   if (error) {
     return (
