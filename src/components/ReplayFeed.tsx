@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ReplayPlayer from './ReplayPlayer';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { ExternalLink, Loader2, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import type { SessionRecording, RRWebEvent } from '@/types/posthog';
 
 interface ReplayFeedProps {
@@ -218,10 +222,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-xl text-gray-600 dark:text-gray-400">Loading replays...</p>
+          <Loader2 className="h-16 w-16 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-xl text-muted-foreground">Loading replays...</p>
         </div>
       </div>
     );
@@ -229,15 +233,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <p className="text-xl text-red-600 mb-4">{error}</p>
-          <button
-            onClick={onLogout}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg"
-          >
-            Try Different Credentials
-          </button>
+          <p className="text-xl text-destructive mb-4">{error}</p>
+          <Button onClick={onLogout}>Try Different Credentials</Button>
         </div>
       </div>
     );
@@ -245,17 +244,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
 
   if (recordings.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <p className="text-xl text-gray-600 dark:text-gray-400 mb-4">
-            No recordings found
-          </p>
-          <button
-            onClick={onLogout}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg"
-          >
-            Change Credentials
-          </button>
+          <p className="text-xl text-muted-foreground mb-4">No recordings found</p>
+          <Button onClick={onLogout}>Change Credentials</Button>
         </div>
       </div>
     );
@@ -265,30 +257,27 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const currentSnapshots = snapshots[currentRecording.id] || [];
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="bg-gray-900 text-white p-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold">PostHog Replays</h1>
-        <button
-          onClick={onLogout}
-          className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded"
-        >
-          Logout
-        </button>
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+          <h1 className="text-xl font-bold">PostHog Replays</h1>
+          <Button variant="ghost" size="sm" onClick={onLogout}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
+        </div>
       </header>
 
-      {/* Main replay area - TikTok style */}
-      <div className="flex-1 flex items-center justify-center relative overflow-hidden">
+      {/* Main replay area */}
+      <div className="flex-1 flex items-center justify-center bg-black p-4">
         {snapshotError ? (
-          <div className="text-white text-center max-w-md">
-            <p className="text-red-400 mb-4 font-semibold">Failed to load replay</p>
-            <p className="text-sm text-gray-400 mb-4">{snapshotError}</p>
-            <button
-              onClick={() => fetchSnapshotsForRecording(currentRecording.id, true)}
-              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
-            >
+          <div className="text-center max-w-md">
+            <p className="text-destructive mb-4 font-semibold">Failed to load replay</p>
+            <p className="text-sm text-muted-foreground mb-4">{snapshotError}</p>
+            <Button onClick={() => fetchSnapshotsForRecording(currentRecording.id, true)}>
               Retry
-            </button>
+            </Button>
           </div>
         ) : currentSnapshots.length > 0 ? (
           <ReplayPlayer
@@ -299,56 +288,73 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
             onFinish={handleNext}
           />
         ) : (
-          <div className="text-white text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <div className="text-center text-white">
+            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
             <p>Loading replay data...</p>
-            <p className="text-xs text-gray-400 mt-2">Recording {currentIndex + 1} of {recordings.length}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Recording {currentIndex + 1} of {recordings.length}
+            </p>
           </div>
         )}
       </div>
 
-      {/* Recording info - below player */}
-      <div className="bg-gray-900 text-white p-4 text-center border-t border-gray-800">
-        <p className="font-semibold mb-1">
-          {currentRecording.person?.name || currentRecording.distinct_id}
-        </p>
-        <p className="text-sm text-gray-300 mb-2">{currentRecording.start_url}</p>
-        <p className="text-xs text-gray-400 mb-2">
-          Duration: {formatDuration(currentRecording.recording_duration)} • 
-          {' '}{currentRecording.click_count} clicks • 
-          {' '}{currentRecording.keypress_count} keypresses
-        </p>
-        <a
-          href={`https://us.posthog.com/project/${credentials.projectId}/replay/${currentRecording.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-400 hover:text-blue-300 underline"
-        >
-          View in PostHog →
-        </a>
+      {/* Recording info */}
+      <div className="border-t bg-card">
+        <div className="container mx-auto px-4 py-4 text-center">
+          <p className="font-semibold mb-1">
+            {currentRecording.person?.name || currentRecording.distinct_id}
+          </p>
+          <p className="text-sm text-muted-foreground mb-2 truncate">
+            {currentRecording.start_url}
+          </p>
+          <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+            <Badge variant="secondary">
+              Duration: {formatDuration(currentRecording.recording_duration)}
+            </Badge>
+            <Badge variant="secondary">{currentRecording.click_count} clicks</Badge>
+            <Badge variant="secondary">{currentRecording.keypress_count} keypresses</Badge>
+          </div>
+          <a
+            href={`https://us.posthog.com/project/${credentials.projectId}/replay/${currentRecording.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+          >
+            View in PostHog
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
       </div>
 
+      <Separator />
+
       {/* Navigation controls */}
-      <div className="bg-gray-900 p-4 flex justify-between items-center">
-        <button
-          onClick={handlePrevious}
-          disabled={currentIndex === 0}
-          className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
-        >
-          ← Previous
-        </button>
-        
-        <span className="text-white">
-          {currentIndex + 1} / {recordings.length}
-        </span>
-        
-        <button
-          onClick={handleNext}
-          disabled={currentIndex === recordings.length - 1}
-          className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
-        >
-          Next →
-        </button>
+      <div className="border-t bg-card">
+        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+          <Button
+            onClick={handlePrevious}
+            disabled={currentIndex === 0}
+            variant="outline"
+            size="default"
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Previous
+          </Button>
+
+          <Badge variant="outline" className="text-sm">
+            {currentIndex + 1} / {recordings.length}
+          </Badge>
+
+          <Button
+            onClick={handleNext}
+            disabled={currentIndex === recordings.length - 1}
+            variant="outline"
+            size="default"
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-2" />
+          </Button>
+        </div>
       </div>
     </div>
   );
