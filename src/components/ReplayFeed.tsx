@@ -25,6 +25,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set()); // Track in-flight requests
   const lastScrollTime = useRef<number>(0);  // Add this to prevent rapid scrolling
+  const touchStartY = useRef<number>(0);  // Add this for touch tracking
 
   // Fetch list of recordings on mount
   useEffect(() => {
@@ -71,30 +72,26 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     }
   }, [currentIndex, recordings]);
 
-  // Add this new useEffect for scroll navigation
+  // Scroll navigation for desktop
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       const now = Date.now();
-      // Increase debounce to 1500ms for more reliable single navigation
       if (now - lastScrollTime.current < 1500) {
         e.preventDefault();
         return;
       }
 
-      // Require a minimum scroll threshold to avoid tiny accidental scrolls
       if (Math.abs(e.deltaY) < 50) {
         return;
       }
 
       if (e.deltaY > 0) {
-        // Scrolling down = next recording
         if (currentIndex < recordings.length - 1) {
           e.preventDefault();
           lastScrollTime.current = now;
           handleNext();
         }
       } else if (e.deltaY < 0) {
-        // Scrolling up = previous recording
         if (currentIndex > 0) {
           e.preventDefault();
           lastScrollTime.current = now;
@@ -108,7 +105,52 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     return () => {
       window.removeEventListener('wheel', handleWheel);
     };
-  }, [currentIndex, recordings.length]);
+  }, [currentIndex, recordings.length, handleNext, handlePrevious]);
+
+  // Touch navigation for mobile
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndY = e.changedTouches[0].clientY;
+      const deltaY = touchStartY.current - touchEndY;
+      const now = Date.now();
+
+      // Debounce
+      if (now - lastScrollTime.current < 1500) {
+        return;
+      }
+
+      // Require minimum swipe distance (50px)
+      if (Math.abs(deltaY) < 50) {
+        return;
+      }
+
+      if (deltaY > 0) {
+        // Swiped up = next recording
+        if (currentIndex < recordings.length - 1) {
+          lastScrollTime.current = now;
+          handleNext();
+        }
+      } else {
+        // Swiped down = previous recording
+        if (currentIndex > 0) {
+          lastScrollTime.current = now;
+          handlePrevious();
+        }
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [currentIndex, recordings.length, handleNext, handlePrevious]);
 
   // Prefetch recordings from current index to current index + 4
   const prefetchRecordings = useCallback((recordingsList: SessionRecording[], fromIndex: number) => {
