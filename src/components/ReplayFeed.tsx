@@ -27,6 +27,21 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const lastScrollTime = useRef<number>(0);  // Add this to prevent rapid scrolling
   const touchStartY = useRef<number>(0);  // Add this for touch tracking
 
+  // Define navigation functions BEFORE useEffects
+  const handleNext = useCallback(() => {
+    if (currentIndex < recordings.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setSnapshotError(null);
+    }
+  }, [currentIndex, recordings.length]);
+
+  const handlePrevious = useCallback(() => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+      setSnapshotError(null);
+    }
+  }, [currentIndex]);
+
   // Fetch list of recordings on mount
   useEffect(() => {
     const fetchRecordings = async () => {
@@ -236,24 +251,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       });
     }
   };
-
-  // Navigate to next recording
-  const handleNext = useCallback(() => {
-    if (currentIndex < recordings.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setSnapshotError(null);
-      // Prefetching happens automatically via useEffect
-    }
-  }, [currentIndex, recordings.length]);
-
-  // Navigate to previous recording
-  const handlePrevious = useCallback(() => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-      setSnapshotError(null);
-      // Prefetching happens automatically via useEffect
-    }
-  }, [currentIndex]);
 
   // Format duration in seconds to mm:ss
   const formatDuration = (seconds: number) => {
