@@ -9,18 +9,17 @@ interface ReplayPlayerProps {
   recordingId: string;
   snapshots: RRWebEvent[];
   autoPlay?: boolean;
-  onFinish?: () => void;  // Add this prop
+  onFinish?: () => void;
 }
 
 export default function ReplayPlayer({ 
   recordingId, 
   snapshots, 
   autoPlay = true,
-  onFinish  // Add this
+  onFinish
 }: ReplayPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<rrwebPlayer | null>(null);
-  const [playerReady, setPlayerReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
@@ -91,7 +90,6 @@ export default function ReplayPlayer({
         }
 
         console.log('✅ Player created successfully');
-        setPlayerReady(true);
       } catch (err) {
         console.error('❌ Error initializing player:', err);
         setError(`Failed to load replay player: ${err}`);
@@ -106,7 +104,7 @@ export default function ReplayPlayer({
         playerRef.current.pause();
       }
     };
-  }, [snapshots, autoPlay, recordingId, dimensions, onFinish]);  // Add onFinish to dependencies
+  }, [snapshots, autoPlay, recordingId, dimensions, onFinish]);
 
   if (error) {
     return (
@@ -122,14 +120,6 @@ export default function ReplayPlayer({
   return (
     <div className="w-full flex justify-center">
       <div ref={containerRef} className="rounded-lg overflow-hidden shadow-lg" />
-      {!playerReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-lg">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Initializing player...</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

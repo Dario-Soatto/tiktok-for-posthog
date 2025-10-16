@@ -23,24 +23,9 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
-  const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set()); // Track in-flight requests
-  const lastScrollTime = useRef<number>(0);  // Add this to prevent rapid scrolling
-  const touchStartY = useRef<number>(0);  // Add this for touch tracking
-
-  // Define navigation functions BEFORE useEffects
-  const handleNext = useCallback(() => {
-    if (currentIndex < recordings.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setSnapshotError(null);
-    }
-  }, [currentIndex, recordings.length]);
-
-  const handlePrevious = useCallback(() => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-      setSnapshotError(null);
-    }
-  }, [currentIndex]);
+  const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set());
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isScrollingProgrammatically = useRef(false);
 
   // Fetch list of recordings on mount
   useEffect(() => {
@@ -87,85 +72,73 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     }
   }, [currentIndex, recordings]);
 
-  // Scroll navigation for desktop
+  // Detect scroll position to update current index
   useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      const now = Date.now();
-      if (now - lastScrollTime.current < 1500) {
-        e.preventDefault();
-        return;
-      }
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-      if (Math.abs(e.deltaY) < 50) {
-        return;
-      }
+    const handleScroll = () => {
+      // Skip if we're scrolling programmatically
+      if (isScrollingProgrammatically.current) return;
 
-      if (e.deltaY > 0) {
-        if (currentIndex < recordings.length - 1) {
-          e.preventDefault();
-          lastScrollTime.current = now;
-          handleNext();
-        }
-      } else if (e.deltaY < 0) {
-        if (currentIndex > 0) {
-          e.preventDefault();
-          lastScrollTime.current = now;
-          handlePrevious();
-        }
+      const scrollTop = container.scrollTop;
+      const containerHeight = container.clientHeight;
+      const newIndex = Math.round(scrollTop / containerHeight);
+
+      if (newIndex !== currentIndex && newIndex >= 0 && newIndex < recordings.length) {
+        setCurrentIndex(newIndex);
+        setSnapshotError(null);
       }
     };
 
-    window.addEventListener('wheel', handleWheel);
+    // Use a slight debounce to avoid too many updates
+    let timeoutId: NodeJS.Timeout;
+    const debouncedHandleScroll = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleScroll, 100);
+    };
+
+    container.addEventListener('scroll', debouncedHandleScroll, { passive: true });
     
     return () => {
-      window.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('scroll', debouncedHandleScroll);
+      clearTimeout(timeoutId);
     };
-  }, [currentIndex, recordings.length, handleNext, handlePrevious]);
+  }, [currentIndex, recordings.length]);
 
-  // Touch navigation for mobile
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartY.current = e.touches[0].clientY;
-    };
+  // Navigation functions
+  const scrollToIndex = useCallback((index: number) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-    const handleTouchEnd = (e: TouchEvent) => {
-      const touchEndY = e.changedTouches[0].clientY;
-      const deltaY = touchStartY.current - touchEndY;
-      const now = Date.now();
-
-      // Debounce
-      if (now - lastScrollTime.current < 1500) {
-        return;
-      }
-
-      // Require minimum swipe distance (50px)
-      if (Math.abs(deltaY) < 50) {
-        return;
-      }
-
-      if (deltaY > 0) {
-        // Swiped up = next recording
-        if (currentIndex < recordings.length - 1) {
-          lastScrollTime.current = now;
-          handleNext();
-        }
-      } else {
-        // Swiped down = previous recording
-        if (currentIndex > 0) {
-          lastScrollTime.current = now;
-          handlePrevious();
-        }
-      }
-    };
-
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    isScrollingProgrammatically.current = true;
+    const targetScroll = index * container.clientHeight;
     
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [currentIndex, recordings.length, handleNext, handlePrevious]);
+    container.scrollTo({
+      top: targetScroll,
+      behavior: 'smooth',
+    });
+
+    // Reset flag after animation
+    setTimeout(() => {
+      isScrollingProgrammatically.current = false;
+    }, 500);
+
+    setCurrentIndex(index);
+    setSnapshotError(null);
+  }, []);
+
+  const handleNext = useCallback(() => {
+    if (currentIndex < recordings.length - 1) {
+      scrollToIndex(currentIndex + 1);
+    }
+  }, [currentIndex, recordings.length, scrollToIndex]);
+
+  const handlePrevious = useCallback(() => {
+    if (currentIndex > 0) {
+      scrollToIndex(currentIndex - 1);
+    }
+  }, [currentIndex, scrollToIndex]);
 
   // Prefetch recordings from current index to current index + 4
   const prefetchRecordings = useCallback((recordingsList: SessionRecording[], fromIndex: number) => {
@@ -173,25 +146,21 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     
     for (let i = fromIndex; i < endIndex; i++) {
       const recording = recordingsList[i];
-      // Fetch in background without awaiting
       fetchSnapshotsForRecording(recording.id, i === fromIndex);
     }
   }, [snapshots, fetchingIds]);
 
   // Fetch snapshots for a specific recording
   const fetchSnapshotsForRecording = async (recordingId: string, isPrimary: boolean = false) => {
-    // Don't fetch if we already have it or it's already being fetched
     if (snapshots[recordingId] || fetchingIds.has(recordingId)) {
       return;
     }
 
-    // Mark as being fetched
     setFetchingIds(prev => new Set(prev).add(recordingId));
 
     try {
       console.log(`${isPrimary ? '🎯' : '⏳'} Fetching snapshots for recording ${recordingId}...`);
       
-      // Only clear error for the primary (current) recording
       if (isPrimary) {
         setSnapshotError(null);
       }
@@ -210,7 +179,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
 
       const data = await response.json();
       
-      // Try to extract snapshots - PostHog might return different formats
       let allSnapshots: RRWebEvent[] = [];
       
       if (data.snapshot_data_by_window_id) {
@@ -238,12 +206,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       
     } catch (err) {
       console.error('Error fetching snapshots:', err);
-      // Only set error state for the primary (current) recording
       if (isPrimary) {
         setSnapshotError(err instanceof Error ? err.message : 'Failed to load snapshot data');
       }
     } finally {
-      // Remove from in-flight set
       setFetchingIds(prev => {
         const next = new Set(prev);
         next.delete(recordingId);
@@ -252,7 +218,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     }
   };
 
-  // Format duration in seconds to mm:ss
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -292,13 +257,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     );
   }
 
-  const currentRecording = recordings[currentIndex];
-  const currentSnapshots = snapshots[currentRecording.id] || [];
-
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b bg-card">
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Fixed Header */}
+      <header className="border-b bg-card z-10 flex-shrink-0">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <h1 className="text-xl font-bold">PostHog Replays</h1>
           <Button variant="ghost" size="sm" onClick={onLogout}>
@@ -308,92 +270,117 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
         </div>
       </header>
 
-      {/* Main replay area */}
-      <div className="flex-1 flex items-center justify-center bg-black p-4">
-        {snapshotError ? (
-          <div className="text-center max-w-md">
-            <p className="text-destructive mb-4 font-semibold">Failed to load replay</p>
-            <p className="text-sm text-muted-foreground mb-4">{snapshotError}</p>
-            <Button onClick={() => fetchSnapshotsForRecording(currentRecording.id, true)}>
-              Retry
-            </Button>
-          </div>
-        ) : currentSnapshots.length > 0 ? (
-          <ReplayPlayer
-            key={currentRecording.id}
-            recordingId={currentRecording.id}
-            snapshots={currentSnapshots}
-            autoPlay={true}
-            onFinish={handleNext}
-          />
-        ) : (
-          <div className="text-center text-white">
-            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
-            <p>Loading replay data...</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Recording {currentIndex + 1} of {recordings.length}
-            </p>
-          </div>
-        )}
-      </div>
+      {/* Scrollable container with snap points */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-scroll snap-y snap-mandatory"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        <style jsx>{`
+          div::-webkit-scrollbar {
+            display: none;
+          }
+        `}</style>
+        
+        {recordings.map((recording, index) => {
+          const currentSnapshots = snapshots[recording.id] || [];
+          const isActive = index === currentIndex;
+          
+          return (
+            <div
+              key={recording.id}
+              className="h-screen w-full snap-start snap-always flex flex-col"
+            >
+              {/* Main replay area */}
+              <div className="flex-1 flex items-center justify-center bg-black p-4">
+                {snapshotError && isActive ? (
+                  <div className="text-center max-w-md">
+                    <p className="text-destructive mb-4 font-semibold">Failed to load replay</p>
+                    <p className="text-sm text-muted-foreground mb-4">{snapshotError}</p>
+                    <Button onClick={() => fetchSnapshotsForRecording(recording.id, true)}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : currentSnapshots.length > 0 ? (
+                  <ReplayPlayer
+                    key={recording.id}
+                    recordingId={recording.id}
+                    snapshots={currentSnapshots}
+                    autoPlay={isActive}
+                    onFinish={handleNext}
+                  />
+                ) : (
+                  <div className="text-center text-white">
+                    <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
+                    <p>Loading replay data...</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Recording {index + 1} of {recordings.length}
+                    </p>
+                  </div>
+                )}
+              </div>
 
-      {/* Recording info */}
-      <div className="border-t bg-card">
-        <div className="container mx-auto px-4 py-4 text-center">
-          <p className="font-semibold mb-1">
-            {currentRecording.person?.name || currentRecording.distinct_id}
-          </p>
-          <p className="text-sm text-muted-foreground mb-2 truncate">
-            {currentRecording.start_url}
-          </p>
-          <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
-            <Badge variant="secondary">
-              Duration: {formatDuration(currentRecording.recording_duration)}
-            </Badge>
-            <Badge variant="secondary">{currentRecording.click_count} clicks</Badge>
-            <Badge variant="secondary">{currentRecording.keypress_count} keypresses</Badge>
-          </div>
-          <a
-            href={`https://us.posthog.com/project/${credentials.projectId}/replay/${currentRecording.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-          >
-            View in PostHog
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-      </div>
+              {/* Recording info */}
+              <div className="border-t bg-card flex-shrink-0">
+                <div className="container mx-auto px-4 py-4 text-center">
+                  <p className="font-semibold mb-1">
+                    {recording.person?.name || recording.distinct_id}
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-2 truncate">
+                    {recording.start_url}
+                  </p>
+                  <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                    <Badge variant="secondary">
+                      Duration: {formatDuration(recording.recording_duration)}
+                    </Badge>
+                    <Badge variant="secondary">{recording.click_count} clicks</Badge>
+                    <Badge variant="secondary">{recording.keypress_count} keypresses</Badge>
+                  </div>
+                  <a
+                    href={`https://us.posthog.com/project/${credentials.projectId}/replay/${recording.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    View in PostHog
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
 
-      <Separator />
+              <Separator />
 
-      {/* Navigation controls */}
-      <div className="border-t bg-card">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <Button
-            onClick={handlePrevious}
-            disabled={currentIndex === 0}
-            variant="outline"
-            size="default"
-          >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Previous
-          </Button>
+              {/* Navigation controls */}
+              <div className="border-t bg-card flex-shrink-0">
+                <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+                  <Button
+                    onClick={handlePrevious}
+                    disabled={index === 0}
+                    variant="outline"
+                    size="default"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Previous
+                  </Button>
 
-          <Badge variant="outline" className="text-sm">
-            {currentIndex + 1} / {recordings.length}
-          </Badge>
+                  <Badge variant="outline" className="text-sm">
+                    {index + 1} / {recordings.length}
+                  </Badge>
 
-          <Button
-            onClick={handleNext}
-            disabled={currentIndex === recordings.length - 1}
-            variant="outline"
-            size="default"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-2" />
-          </Button>
-        </div>
+                  <Button
+                    onClick={handleNext}
+                    disabled={index === recordings.length - 1}
+                    variant="outline"
+                    size="default"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
