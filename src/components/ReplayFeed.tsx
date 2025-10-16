@@ -26,6 +26,22 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isScrollingProgrammatically = useRef(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const [scrollHeight, setScrollHeight] = useState('100vh');
+
+  // Calculate the height available for scrolling (viewport - header)
+  useEffect(() => {
+    const updateScrollHeight = () => {
+      if (headerRef.current) {
+        const headerHeight = headerRef.current.offsetHeight;
+        setScrollHeight(`calc(100vh - ${headerHeight}px)`);
+      }
+    };
+
+    updateScrollHeight();
+    window.addEventListener('resize', updateScrollHeight);
+    return () => window.removeEventListener('resize', updateScrollHeight);
+  }, []);
 
   // Fetch list of recordings on mount
   useEffect(() => {
@@ -49,7 +65,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
         console.log('Recordings data:', data);
         setRecordings(data.results || []);
         
-        // Prefetch first 5 recordings
         if (data.results && data.results.length > 0) {
           console.log('🚀 Prefetching first 5 recordings...');
           prefetchRecordings(data.results, 0);
@@ -65,20 +80,17 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     fetchRecordings();
   }, [credentials]);
 
-  // Prefetch next 5 recordings when current index changes
   useEffect(() => {
     if (recordings.length > 0) {
       prefetchRecordings(recordings, currentIndex);
     }
   }, [currentIndex, recordings]);
 
-  // Detect scroll position to update current index
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      // Skip if we're scrolling programmatically
       if (isScrollingProgrammatically.current) return;
 
       const scrollTop = container.scrollTop;
@@ -91,7 +103,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       }
     };
 
-    // Use a slight debounce to avoid too many updates
     let timeoutId: NodeJS.Timeout;
     const debouncedHandleScroll = () => {
       clearTimeout(timeoutId);
@@ -106,7 +117,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     };
   }, [currentIndex, recordings.length]);
 
-  // Navigation functions
   const scrollToIndex = useCallback((index: number) => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -119,7 +129,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       behavior: 'smooth',
     });
 
-    // Reset flag after animation
     setTimeout(() => {
       isScrollingProgrammatically.current = false;
     }, 500);
@@ -140,7 +149,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     }
   }, [currentIndex, scrollToIndex]);
 
-  // Prefetch recordings from current index to current index + 4
   const prefetchRecordings = useCallback((recordingsList: SessionRecording[], fromIndex: number) => {
     const endIndex = Math.min(fromIndex + 5, recordingsList.length);
     
@@ -150,7 +158,6 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     }
   }, [snapshots, fetchingIds]);
 
-  // Fetch snapshots for a specific recording
   const fetchSnapshotsForRecording = async (recordingId: string, isPrimary: boolean = false) => {
     if (snapshots[recordingId] || fetchingIds.has(recordingId)) {
       return;
@@ -258,9 +265,9 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen w-screen flex flex-col overflow-hidden">
       {/* Fixed Header */}
-      <header className="border-b bg-card z-10 flex-shrink-0">
+      <header ref={headerRef} className="border-b bg-card z-10 flex-shrink-0">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <h1 className="text-xl font-bold">PostHog Replays</h1>
           <Button variant="ghost" size="sm" onClick={onLogout}>
@@ -273,7 +280,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       {/* Scrollable container with snap points */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-scroll snap-y snap-mandatory"
+        className="flex-1 overflow-y-scroll overflow-x-hidden snap-y snap-mandatory"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         <style jsx>{`
@@ -289,10 +296,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
           return (
             <div
               key={recording.id}
-              className="h-screen w-full snap-start snap-always flex flex-col"
+              className="w-full h-full snap-start snap-always flex flex-col shrink-0"
             >
               {/* Main replay area */}
-              <div className="flex-1 flex items-center justify-center bg-black p-4">
+              <div className="flex-1 flex items-center justify-center bg-black p-4 min-h-0">
                 {snapshotError && isActive ? (
                   <div className="text-center max-w-md">
                     <p className="text-destructive mb-4 font-semibold">Failed to load replay</p>
@@ -322,19 +329,19 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
 
               {/* Recording info */}
               <div className="border-t bg-card flex-shrink-0">
-                <div className="container mx-auto px-4 py-4 text-center">
-                  <p className="font-semibold mb-1">
+                <div className="container mx-auto px-4 py-2 text-center">
+                  <p className="font-semibold text-sm">
                     {recording.person?.name || recording.distinct_id}
                   </p>
-                  <p className="text-sm text-muted-foreground mb-2 truncate">
+                  <p className="text-xs text-muted-foreground mb-1 truncate">
                     {recording.start_url}
                   </p>
-                  <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
-                    <Badge variant="secondary">
-                      Duration: {formatDuration(recording.recording_duration)}
+                  <div className="flex items-center justify-center gap-2 flex-wrap mb-1">
+                    <Badge variant="secondary" className="text-xs py-0">
+                      {formatDuration(recording.recording_duration)}
                     </Badge>
-                    <Badge variant="secondary">{recording.click_count} clicks</Badge>
-                    <Badge variant="secondary">{recording.keypress_count} keypresses</Badge>
+                    <Badge variant="secondary" className="text-xs py-0">{recording.click_count} clicks</Badge>
+                    <Badge variant="secondary" className="text-xs py-0">{recording.keypress_count} keys</Badge>
                   </div>
                   <a
                     href={`https://us.posthog.com/project/${credentials.projectId}/replay/${recording.id}`}
@@ -352,7 +359,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
 
               {/* Navigation controls */}
               <div className="border-t bg-card flex-shrink-0">
-                <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+                <div className="container mx-auto px-4 py-2 flex justify-between items-center">
                   <Button
                     onClick={handlePrevious}
                     disabled={index === 0}
