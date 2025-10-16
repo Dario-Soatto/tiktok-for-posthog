@@ -10,31 +10,82 @@ interface ReplayPlayerProps {
   snapshots: RRWebEvent[];
   autoPlay?: boolean;
   onFinish?: () => void;
+  onDimensionsChange?: (width: number, height: number) => void; // Add this
 }
 
 export default function ReplayPlayer({ 
   recordingId, 
   snapshots, 
   autoPlay = true,
-  onFinish
+  onFinish,
+  onDimensionsChange // Add this
 }: ReplayPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<rrwebPlayer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
-  // Calculate responsive dimensions
+  // Calculate responsive dimensions with constant aspect ratio
   useEffect(() => {
     const calculateDimensions = () => {
-      const maxWidth = Math.min(800, window.innerWidth - 32);
-      const maxHeight = Math.min(600, window.innerHeight * 0.6);
-      setDimensions({ width: maxWidth, height: maxHeight });
+      // Available space: height minus header (80px) and footer (60px) and padding
+      const availableHeight = window.innerHeight - 80 - 60 - 40; // 40px for padding
+      const availableWidth = window.innerWidth - 64; // 64px for left/right padding
+      
+      // Target aspect ratio 4:3 (or adjust to your preference)
+      // For portrait/TikTok-like: 9/16
+      // For landscape: 16/9
+      // For standard: 4/3
+      const targetAspectRatio = 16 / 9; // width / height
+      
+      let width, height;
+      
+      // Calculate based on width constraint
+      const heightFromWidth = availableWidth / targetAspectRatio;
+      
+      if (heightFromWidth <= availableHeight) {
+        // Width is the limiting factor
+        width = availableWidth;
+        height = heightFromWidth;
+      } else {
+        // Height is the limiting factor
+        height = availableHeight;
+        width = height * targetAspectRatio;
+      }
+      
+      // Ensure minimum sizes while maintaining aspect ratio
+      const minWidth = 300;
+      const minHeight = minWidth / targetAspectRatio;
+      
+      if (width < minWidth) {
+        width = minWidth;
+        height = minHeight;
+      }
+      
+      // Ensure maximum sizes while maintaining aspect ratio
+      const maxWidth = 800;
+      const maxHeight = maxWidth / targetAspectRatio;
+      
+      if (width > maxWidth) {
+        width = maxWidth;
+        height = maxHeight;
+      }
+      
+      const finalWidth = Math.round(width);
+      const finalHeight = Math.round(height);
+      
+      setDimensions({ width: finalWidth, height: finalHeight });
+      
+      // Report dimensions to parent
+      if (onDimensionsChange) {
+        onDimensionsChange(finalWidth, finalHeight);
+      }
     };
 
     calculateDimensions();
     window.addEventListener('resize', calculateDimensions);
     return () => window.removeEventListener('resize', calculateDimensions);
-  }, []);
+  }, [onDimensionsChange]); // Add onDimensionsChange to dependencies
 
   useEffect(() => {
     const initPlayer = async () => {

@@ -26,22 +26,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isScrollingProgrammatically = useRef(false);
-  const headerRef = useRef<HTMLElement>(null);
-  const [scrollHeight, setScrollHeight] = useState('100vh');
-
-  // Calculate the height available for scrolling (viewport - header)
-  useEffect(() => {
-    const updateScrollHeight = () => {
-      if (headerRef.current) {
-        const headerHeight = headerRef.current.offsetHeight;
-        setScrollHeight(`calc(100vh - ${headerHeight}px)`);
-      }
-    };
-
-    updateScrollHeight();
-    window.addEventListener('resize', updateScrollHeight);
-    return () => window.removeEventListener('resize', updateScrollHeight);
-  }, []);
+  const [playerWidth, setPlayerWidth] = useState(800); // Add this state
 
   // Fetch list of recordings on mount
   useEffect(() => {
@@ -225,6 +210,13 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     }
   };
 
+  const handlePlayerDimensionsChange = useCallback((width: number, height: number) => {
+    setPlayerWidth(width);
+  }, []);
+
+  // Calculate left and right offsets for footer to align with replay box edges
+  const footerOffset = Math.max(0, (typeof window !== 'undefined' ? window.innerWidth : 0) - playerWidth) / 2;
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -264,13 +256,15 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
     );
   }
 
+  const currentRecording = recordings[currentIndex];
+
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
-      {/* Fixed Header */}
-      <header ref={headerRef} className="border-b bg-card z-10 flex-shrink-0">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 className="text-xl font-bold">PostHog Replays</h1>
-          <Button variant="ghost" size="sm" onClick={onLogout}>
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-black">
+      {/* Fixed Header - Black/Transparent */}
+      <header className="absolute top-0 left-0 right-0 z-20 bg-black/50 backdrop-blur-sm">
+        <div className="px-6 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-white">TikHog</h1>
+          <Button variant="ghost" size="sm" onClick={onLogout} className="text-white hover:bg-white/10">
             <LogOut className="h-4 w-4 mr-2" />
             Logout
           </Button>
@@ -296,10 +290,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
           return (
             <div
               key={recording.id}
-              className="w-full h-full snap-start snap-always flex flex-col shrink-0"
+              className="w-full h-full snap-start snap-always flex items-center justify-center shrink-0"
             >
-              {/* Main replay area */}
-              <div className="flex-1 flex items-center justify-center bg-black p-4 min-h-0">
+              {/* Main replay area - constrained by header/footer with aspect ratio maintained */}
+              <div className="w-full h-full flex items-center justify-center px-4" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
                 {snapshotError && isActive ? (
                   <div className="text-center max-w-md">
                     <p className="text-destructive mb-4 font-semibold">Failed to load replay</p>
@@ -315,6 +309,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
                     snapshots={currentSnapshots}
                     autoPlay={isActive}
                     onFinish={handleNext}
+                    onDimensionsChange={isActive ? handlePlayerDimensionsChange : undefined}
                   />
                 ) : (
                   <div className="text-center text-white">
@@ -326,69 +321,73 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
                   </div>
                 )}
               </div>
-
-              {/* Recording info */}
-              <div className="border-t bg-card flex-shrink-0">
-                <div className="container mx-auto px-4 py-2 text-center">
-                  <p className="font-semibold text-sm">
-                    {recording.person?.name || recording.distinct_id}
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-1 truncate">
-                    {recording.start_url}
-                  </p>
-                  <div className="flex items-center justify-center gap-2 flex-wrap mb-1">
-                    <Badge variant="secondary" className="text-xs py-0">
-                      {formatDuration(recording.recording_duration)}
-                    </Badge>
-                    <Badge variant="secondary" className="text-xs py-0">{recording.click_count} clicks</Badge>
-                    <Badge variant="secondary" className="text-xs py-0">{recording.keypress_count} keys</Badge>
-                  </div>
-                  <a
-                    href={`https://us.posthog.com/project/${credentials.projectId}/replay/${recording.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                  >
-                    View in PostHog
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Navigation controls */}
-              <div className="border-t bg-card flex-shrink-0">
-                <div className="container mx-auto px-4 py-2 flex justify-between items-center">
-                  <Button
-                    onClick={handlePrevious}
-                    disabled={index === 0}
-                    variant="outline"
-                    size="default"
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-2" />
-                    Previous
-                  </Button>
-
-                  <Badge variant="outline" className="text-sm">
-                    {index + 1} / {recordings.length}
-                  </Badge>
-
-                  <Button
-                    onClick={handleNext}
-                    disabled={index === recordings.length - 1}
-                    variant="outline"
-                    size="default"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
-              </div>
             </div>
           );
         })}
       </div>
+
+      {/* Fixed Footer - Black/Transparent, Compact */}
+      <footer className="absolute bottom-0 left-0 right-0 z-20 bg-black/50 backdrop-blur-sm">
+        <div 
+          className="py-3 flex items-end justify-between text-xs text-white/80" 
+          style={{ 
+            paddingLeft: `${footerOffset}px`, 
+            paddingRight: `${footerOffset}px` 
+          }}
+        >
+          {/* Left side - Recording info (stacked vertically) */}
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">
+              {currentRecording?.person?.name || currentRecording?.distinct_id || 'Unknown'}
+            </span>
+            <a
+              href={`https://us.posthog.com/project/${credentials.projectId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-white inline-flex items-center gap-1"
+            >
+              Project {credentials.projectId}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+            <a
+              href={`https://us.posthog.com/project/${credentials.projectId}/replay/${currentRecording?.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-white inline-flex items-center gap-1"
+            >
+              View in PostHog
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+
+          {/* Right side - Navigation */}
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handlePrevious}
+              disabled={currentIndex === 0}
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-white hover:bg-white/10 disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            
+            <span className="text-white/80">
+              {currentIndex + 1} / {recordings.length}
+            </span>
+
+            <Button
+              onClick={handleNext}
+              disabled={currentIndex === recordings.length - 1}
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-white hover:bg-white/10 disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
