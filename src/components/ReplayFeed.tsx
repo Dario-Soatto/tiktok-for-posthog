@@ -26,7 +26,27 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isScrollingProgrammatically = useRef(false);
-  const [playerWidth, setPlayerWidth] = useState(800); // Add this state
+  const [playerWidth, setPlayerWidth] = useState(800);
+  const headerRef = useRef<HTMLElement>(null); // Add this
+  const footerRef = useRef<HTMLElement>(null); // Add this
+  const [headerHeight, setHeaderHeight] = useState(64); // Add this
+  const [footerHeight, setFooterHeight] = useState(68); // Add this
+
+  // Measure header and footer heights
+  useEffect(() => {
+    const measureHeights = () => {
+      if (headerRef.current) {
+        setHeaderHeight(headerRef.current.offsetHeight);
+      }
+      if (footerRef.current) {
+        setFooterHeight(footerRef.current.offsetHeight);
+      }
+    };
+
+    measureHeights();
+    window.addEventListener('resize', measureHeights);
+    return () => window.removeEventListener('resize', measureHeights);
+  }, []);
 
   // Fetch list of recordings on mount
   useEffect(() => {
@@ -217,6 +237,10 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   // Calculate left and right offsets for footer to align with replay box edges
   const footerOffset = Math.max(0, (typeof window !== 'undefined' ? window.innerWidth : 0) - playerWidth) / 2;
 
+  // Calculate padding with 5px gaps
+  const topPadding = headerHeight + 5;
+  const bottomPadding = footerHeight + 5;
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -259,9 +283,9 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
   const currentRecording = recordings[currentIndex];
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-black">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-black relative">
       {/* Fixed Header - Black/Transparent */}
-      <header className="absolute top-0 left-0 right-0 z-20 bg-black/50 backdrop-blur-sm">
+      <header ref={headerRef} className="absolute top-0 left-0 right-0 z-20 bg-black/50 backdrop-blur-sm">
         <div className="px-6 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-white">TikHog</h1>
           <Button variant="ghost" size="sm" onClick={onLogout} className="text-white hover:bg-white/10">
@@ -274,7 +298,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       {/* Scrollable container with snap points */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-scroll overflow-x-hidden snap-y snap-mandatory"
+        className="flex-1 overflow-y-scroll overflow-x-hidden snap-y snap-mandatory relative z-10"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         <style jsx>{`
@@ -290,36 +314,62 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
           return (
             <div
               key={recording.id}
-              className="w-full h-full snap-start snap-always flex items-center justify-center shrink-0"
+              className="w-full h-full snap-start snap-always flex items-center justify-center shrink-0 relative"
             >
-              {/* Main replay area - constrained by header/footer with aspect ratio maintained */}
-              <div className="w-full h-full flex items-center justify-center px-4" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
-                {snapshotError && isActive ? (
-                  <div className="text-center max-w-md">
-                    <p className="text-destructive mb-4 font-semibold">Failed to load replay</p>
-                    <p className="text-sm text-muted-foreground mb-4">{snapshotError}</p>
-                    <Button onClick={() => fetchSnapshotsForRecording(recording.id, true)}>
-                      Retry
-                    </Button>
+              {/* Desktop: Just the replay player centered */}
+              {/* Mobile: YouTube video + Replay player stacked and centered */}
+              <div 
+                className="w-full h-full flex items-center justify-center px-4 md:flex-row flex-col gap-4 md:gap-0" 
+                style={{ 
+                  paddingTop: `${topPadding}px`, 
+                  paddingBottom: `${bottomPadding}px` 
+                }}
+              >
+                {/* YouTube Video - Mobile only, stacked above replay */}
+                <div className="w-full flex items-center justify-center md:hidden">
+                  <div className="w-full max-w-[800px] aspect-video">
+                    <iframe
+                      className="w-full h-full rounded-lg"
+                      style={{ opacity: 0.5 }}
+                      src="https://www.youtube.com/embed/vTfD20dbxho?autoplay=1&mute=1&loop=1&playlist=vTfD20dbxho&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&disablekb=1&fs=0&playsinline=1"
+                      allow="autoplay; encrypted-media"
+                      frameBorder="0"
+                      title="Background video"
+                    />
                   </div>
-                ) : currentSnapshots.length > 0 ? (
-                  <ReplayPlayer
-                    key={recording.id}
-                    recordingId={recording.id}
-                    snapshots={currentSnapshots}
-                    autoPlay={isActive}
-                    onFinish={handleNext}
-                    onDimensionsChange={isActive ? handlePlayerDimensionsChange : undefined}
-                  />
-                ) : (
-                  <div className="text-center text-white">
-                    <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
-                    <p>Loading replay data...</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Recording {index + 1} of {recordings.length}
-                    </p>
-                  </div>
-                )}
+                </div>
+
+                {/* Main replay area */}
+                <div className="w-full flex items-center justify-center relative z-10">
+                  {snapshotError && isActive ? (
+                    <div className="text-center max-w-md">
+                      <p className="text-destructive mb-4 font-semibold">Failed to load replay</p>
+                      <p className="text-sm text-muted-foreground mb-4">{snapshotError}</p>
+                      <Button onClick={() => fetchSnapshotsForRecording(recording.id, true)}>
+                        Retry
+                      </Button>
+                    </div>
+                  ) : currentSnapshots.length > 0 ? (
+                    <ReplayPlayer
+                      key={recording.id}
+                      recordingId={recording.id}
+                      snapshots={currentSnapshots}
+                      autoPlay={isActive}
+                      onFinish={handleNext}
+                      onDimensionsChange={isActive ? handlePlayerDimensionsChange : undefined}
+                      headerHeight={headerHeight}
+                      footerHeight={footerHeight}
+                    />
+                  ) : (
+                    <div className="text-center text-white">
+                      <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
+                      <p>Loading replay data...</p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Recording {index + 1} of {recordings.length}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -327,7 +377,7 @@ export default function ReplayFeed({ credentials, onLogout }: ReplayFeedProps) {
       </div>
 
       {/* Fixed Footer - Black/Transparent, Compact */}
-      <footer className="absolute bottom-0 left-0 right-0 z-20 bg-black/50 backdrop-blur-sm">
+      <footer ref={footerRef} className="absolute bottom-0 left-0 right-0 z-20 bg-black/50 backdrop-blur-sm">
         <div 
           className="py-3 flex items-end justify-between text-xs text-white/80" 
           style={{ 

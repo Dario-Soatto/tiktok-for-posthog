@@ -10,7 +10,9 @@ interface ReplayPlayerProps {
   snapshots: RRWebEvent[];
   autoPlay?: boolean;
   onFinish?: () => void;
-  onDimensionsChange?: (width: number, height: number) => void; // Add this
+  onDimensionsChange?: (width: number, height: number) => void;
+  headerHeight?: number; // Add this
+  footerHeight?: number; // Add this
 }
 
 export default function ReplayPlayer({ 
@@ -18,7 +20,9 @@ export default function ReplayPlayer({
   snapshots, 
   autoPlay = true,
   onFinish,
-  onDimensionsChange // Add this
+  onDimensionsChange,
+  headerHeight = 64, // Add this with default
+  footerHeight = 68  // Add this with default
 }: ReplayPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<rrwebPlayer | null>(null);
@@ -28,8 +32,8 @@ export default function ReplayPlayer({
   // Calculate responsive dimensions with constant aspect ratio
   useEffect(() => {
     const calculateDimensions = () => {
-      // Available space: height minus header (80px) and footer (60px) and padding
-      const availableHeight = window.innerHeight - 80 - 60 - 40; // 40px for padding
+      // Available space: height minus header and footer and 5px gaps (10px total)
+      const availableHeight = window.innerHeight - headerHeight - footerHeight - 10;
       const availableWidth = window.innerWidth - 64; // 64px for left/right padding
       
       // Target aspect ratio 4:3 (or adjust to your preference)
@@ -85,7 +89,7 @@ export default function ReplayPlayer({
     calculateDimensions();
     window.addEventListener('resize', calculateDimensions);
     return () => window.removeEventListener('resize', calculateDimensions);
-  }, [onDimensionsChange]); // Add onDimensionsChange to dependencies
+  }, [onDimensionsChange, headerHeight, footerHeight]); // Add headerHeight and footerHeight to dependencies
 
   useEffect(() => {
     const initPlayer = async () => {
